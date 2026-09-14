@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>LTP - Legislação Trabalhista Empresarial</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ink:#172033;--muted:#6b778c;--accent:#193b67;--border:#dfe7f1;--ok:#147a4b;--warn:#9a6500}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--ink)}header{background:#193b67;color:white;padding:34px 20px}.wrap{max-width:1080px;margin:auto}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}.back{color:white;text-decoration:none}.tabs{display:flex;gap:10px;margin:24px 0;flex-wrap:wrap}.tab{border:1px solid var(--border);background:#fff;padding:10px 14px;border-radius:999px;cursor:pointer}.tab.active{background:var(--accent);color:#fff}.section{display:none}.section.active{display:block}.grid{display:grid;gap:14px}.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 7px 22px rgba(30,55,90,.06)}.meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:14px}.tag{background:#eef4fb;border-radius:999px;padding:5px 9px}.btn{display:inline-block;margin-top:12px;background:var(--accent);color:white;text-decoration:none;border:0;border-radius:9px;padding:10px 14px;font-weight:700}.empty{padding:34px;text-align:center;color:var(--muted);background:#fff;border:1px dashed #cfd9e7;border-radius:14px}.status{font-size:13px;font-weight:700}.pub{color:var(--ok)}main{padding:0 20px 40px}h1{margin:0}header p{margin-bottom:0;opacity:.9}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="top"><div><h1>LTP – Legislação Trabalhista Empresarial</h1><p>2º MTEC – Contabilidade • Etec de Mairinque</p></div><a class="back" href="../">← Voltar à turma</a></div></div></header>
+<main class="wrap">
+<div class="tabs"><button class="tab active" data-tab="atividades">Atividades do semestre</button><button class="tab" data-tab="materiais">Material de apoio</button></div>
+<section id="atividades" class="section active"><div id="listaAtividades" class="grid"><div class="empty">Carregando atividades...</div></div></section>
+<section id="materiais" class="section"><div id="listaMateriais" class="grid"><div class="empty">Carregando materiais...</div></div></section>
+</main>
+<script src="../config.js"></script>
+<script>
+const cfg=window.PORTAL_CONFIG||{};
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab,.section').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.tab).classList.add('active')});
+function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function cardAtividade(a){const prazo=a.prazo?new Date(a.prazo+'T12:00:00').toLocaleDateString('pt-BR'): 'Sem prazo';return `<article class="card"><div class="meta"><span class="tag">${esc(a.tipoEnvio||'Sem envio')}</span><span class="tag">Prazo: ${esc(prazo)}</span></div><h2>${esc(a.titulo)}</h2><p>${esc(a.descricao||'')}</p><span class="status pub">PUBLICADA</span><br><a class="btn" href="atividade/?id=${encodeURIComponent(a.id)}">Abrir atividade</a></article>`}
+function cardMaterial(m){return `<article class="card"><h2>${esc(m.titulo)}</h2><p>${esc(m.descricao||'')}</p>${m.url?`<a class="btn" href="${esc(m.url)}" target="_blank" rel="noopener">Abrir material</a>`:''}</article>`}
+async function carregar(){
+ if(!cfg.apiUrl){document.getElementById('listaAtividades').innerHTML='<div class="empty">Nenhuma atividade publicada ainda.</div>';document.getElementById('listaMateriais').innerHTML='<div class="empty">Nenhum material publicado ainda.</div>';return}
+ try{const u=new URL(cfg.apiUrl);u.searchParams.set('action','listar');u.searchParams.set('turma',cfg.turma);u.searchParams.set('componente',cfg.componente);const r=await fetch(u);const d=await r.json();const ats=(d.atividades||[]).filter(x=>x.status==='PUBLICADA');const mats=(d.materiais||[]).filter(x=>x.status==='PUBLICADO');document.getElementById('listaAtividades').innerHTML=ats.length?ats.map(cardAtividade).join(''):'<div class="empty">Nenhuma atividade publicada ainda.</div>';document.getElementById('listaMateriais').innerHTML=mats.length?mats.map(cardMaterial).join(''):'<div class="empty">Nenhum material publicado ainda.</div>'}catch(e){document.getElementById('listaAtividades').innerHTML='<div class="empty">Não foi possível carregar as atividades.</div>';document.getElementById('listaMateriais').innerHTML='<div class="empty">Não foi possível carregar os materiais.</div>'}}
+carregar();
+</script>
+</body></html>
