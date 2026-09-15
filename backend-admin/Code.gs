@@ -47,6 +47,28 @@ function salvarAtividade(d){
   return {ok:true,id:d.id};
 }
 
+function excluirAtividade(id){
+  if(!id)throw new Error('ID da atividade não informado');
+  const sh=sh_('ATIVIDADES');
+  const v=sh.getDataRange().getValues();
+  if(v.length<2)throw new Error('Nenhuma atividade cadastrada');
+  const h=v[0];
+  const idxId=h.indexOf('ID_ATIVIDADE');
+  const idxTurma=h.indexOf('TURMA');
+  const idxComp=h.indexOf('COMPONENTE');
+  if(idxId<0)throw new Error('Coluna ID_ATIVIDADE não encontrada');
+  for(let i=1;i<v.length;i++){
+    const mesmoId=String(v[i][idxId])===String(id);
+    const mesmaTurma=idxTurma<0||String(v[i][idxTurma])===TURMA;
+    const mesmoComponente=idxComp<0||String(v[i][idxComp])===COMPONENTE;
+    if(mesmoId&&mesmaTurma&&mesmoComponente){
+      sh.deleteRow(i+1);
+      return {ok:true,id:id};
+    }
+  }
+  throw new Error('Atividade não encontrada');
+}
+
 function listarEntregas(idAtividade){
   return rows_('ENTREGAS').filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade)).map(e=>({
     id:e.ID_ENTREGA,idAtividade:e.ID_ATIVIDADE,aluno:e.ALUNO,email:e.EMAIL,
