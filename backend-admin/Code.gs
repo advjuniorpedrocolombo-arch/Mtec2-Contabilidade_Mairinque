@@ -10,8 +10,9 @@ function doGet(){
 
 function ss_(){return SpreadsheetApp.openById(SHEET_ID)}
 function sh_(nome){const sh=ss_().getSheetByName(nome);if(!sh)throw new Error('Aba não encontrada: '+nome);return sh}
-function rows_(nome){const v=sh_(nome).getDataRange().getValues();if(v.length<2)return[];const h=v.shift();return v.filter(r=>r.some(c=>c!==''&&c!==null)).map(r=>Object.fromEntries(h.map((k,i)=>[String(k),r[i]])))}
+function rows_(nome){const sh=sh_(nome);const lastRow=sh.getLastRow(),lastCol=sh.getLastColumn();if(lastRow<2||lastCol<1)return[];const v=sh.getRange(1,1,lastRow,lastCol).getValues();const h=v.shift();return v.filter(r=>r.some(c=>c!==''&&c!==null)).map(r=>Object.fromEntries(h.map((k,i)=>[String(k),r[i]])))}
 function date_(v){if(!v)return'';if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');return String(v).slice(0,10)}
+function dateTime_(v){if(!v)return'';if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),'dd/MM/yyyy HH:mm:ss');return String(v)}
 
 function listarAtividades(){
   return rows_('ATIVIDADES').filter(x=>x.TURMA===TURMA&&x.COMPONENTE===COMPONENTE).map(a=>({
@@ -70,13 +71,24 @@ function excluirAtividade(id){
 }
 
 function listarEntregas(idAtividade){
-  return rows_('ENTREGAS').filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade)).map(e=>({
-    id:e.ID_ENTREGA,idAtividade:e.ID_ATIVIDADE,aluno:e.ALUNO,email:e.EMAIL,
-    arquivos:e.ARQUIVOS_URL,resposta:e.RESPOSTA_TEXTO,dataEnvio:e.DATA_ENVIO,status:e.STATUS,
-    tentativa:e.TENTATIVA,observacao:e.OBSERVACAO
-  }));
+  return rows_('ENTREGAS')
+    .filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade))
+    .map(e=>({
+      id:String(e.ID_ENTREGA||''),
+      idAtividade:String(e.ID_ATIVIDADE||''),
+      aluno:String(e.ALUNO||''),
+      email:String(e.EMAIL||''),
+      arquivos:String(e.ARQUIVOS_URL||''),
+      resposta:String(e.RESPOSTA_TEXTO||''),
+      dataEnvio:dateTime_(e.DATA_ENVIO),
+      status:String(e.STATUS||''),
+      tentativa:Number(e.TENTATIVA||1),
+      observacao:String(e.OBSERVACAO||'')
+    }));
 }
 
 function listarCorrecoes(idAtividade){
-  return rows_('CORRECOES').filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade));
+  return rows_('CORRECOES').filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade)).map(x=>{
+    const o={};Object.keys(x).forEach(k=>o[k]=Object.prototype.toString.call(x[k])==='[object Date]'?dateTime_(x[k]):x[k]);return o;
+  });
 }
