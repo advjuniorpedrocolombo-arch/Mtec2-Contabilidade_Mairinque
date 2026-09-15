@@ -70,6 +70,77 @@ function excluirAtividade(id){
   throw new Error('Atividade não encontrada');
 }
 
+function listarMateriais(){
+  return rows_('MATERIAIS')
+    .filter(x=>String(x.COMPONENTE||'')===COMPONENTE)
+    .map(m=>({
+      id:String(m.ID_MATERIAL||''),
+      titulo:String(m.TITULO||''),
+      descricao:String(m.DESCRICAO||''),
+      url:String(m.ARQUIVO_URL||''),
+      tipo:String(m.TIPO||'MATERIAL'),
+      ordem:Number(m.ORDEM||999),
+      status:String(m.STATUS||'OCULTO'),
+      publicadoEm:dateTime_(m.PUBLICADO_EM)
+    }))
+    .sort((a,b)=>(Number(a.ordem)||999)-(Number(b.ordem)||999));
+}
+
+function salvarMaterial(d){
+  if(!d||!d.titulo||!d.url)throw new Error('Título e URL são obrigatórios');
+  const sh=sh_('MATERIAIS');
+  const v=sh.getDataRange().getValues();
+  const h=v[0];
+  const idx=h.indexOf('ID_MATERIAL');
+  if(idx<0)throw new Error('Coluna ID_MATERIAL não encontrada');
+  const id=String(d.id||('MAT-'+Utilities.getUuid().slice(0,8).toUpperCase())).trim();
+  const now=new Date();
+  const map={
+    ID_MATERIAL:id,
+    COMPONENTE:COMPONENTE,
+    TITULO:String(d.titulo||'').trim(),
+    DESCRICAO:String(d.descricao||''),
+    ARQUIVO_URL:String(d.url||'').trim(),
+    TIPO:String(d.tipo||'MATERIAL'),
+    ORDEM:Number(d.ordem||999),
+    STATUS:String(d.status||'PUBLICADO'),
+    PUBLICADO_EM:now
+  };
+  let found=0;
+  for(let i=1;i<v.length;i++)if(String(v[i][idx])===id){found=i+1;break}
+  if(found){
+    const old=Object.fromEntries(h.map((k,i)=>[k,v[found-1][i]]));
+    if(String(map.STATUS)!=='PUBLICADO'&&old.PUBLICADO_EM)map.PUBLICADO_EM=old.PUBLICADO_EM;
+    if(String(map.STATUS)==='PUBLICADO'&&old.PUBLICADO_EM)map.PUBLICADO_EM=old.PUBLICADO_EM;
+    const row=h.map(k=>map[k]!==undefined?map[k]:'');
+    sh.getRange(found,1,1,row.length).setValues([row]);
+  }else{
+    const row=h.map(k=>map[k]!==undefined?map[k]:'');
+    sh.appendRow(row);
+  }
+  return {ok:true,id:id};
+}
+
+function excluirMaterial(id){
+  if(!id)throw new Error('ID do material não informado');
+  const sh=sh_('MATERIAIS');
+  const v=sh.getDataRange().getValues();
+  if(v.length<2)throw new Error('Nenhum material cadastrado');
+  const h=v[0];
+  const idxId=h.indexOf('ID_MATERIAL');
+  const idxComp=h.indexOf('COMPONENTE');
+  if(idxId<0)throw new Error('Coluna ID_MATERIAL não encontrada');
+  for(let i=1;i<v.length;i++){
+    const mesmoId=String(v[i][idxId])===String(id);
+    const mesmoComponente=idxComp<0||String(v[i][idxComp])===COMPONENTE;
+    if(mesmoId&&mesmoComponente){
+      sh.deleteRow(i+1);
+      return {ok:true,id:id};
+    }
+  }
+  throw new Error('Material não encontrado');
+}
+
 function listarEntregas(idAtividade){
   return rows_('ENTREGAS')
     .filter(x=>!idAtividade||String(x.ID_ATIVIDADE)===String(idAtividade))
