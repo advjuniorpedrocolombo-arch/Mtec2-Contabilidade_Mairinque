@@ -13,11 +13,25 @@ function sh_(nome){const sh=ss_().getSheetByName(nome);if(!sh)throw new Error('A
 function rows_(nome){const sh=sh_(nome);const lastRow=sh.getLastRow(),lastCol=sh.getLastColumn();if(lastRow<2||lastCol<1)return[];const v=sh.getRange(1,1,lastRow,lastCol).getValues();const h=v.shift();return v.filter(r=>r.some(c=>c!==''&&c!==null)).map(r=>Object.fromEntries(h.map((k,i)=>[String(k),r[i]])))}
 function date_(v){if(!v)return'';if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');return String(v).slice(0,10)}
 function dateTime_(v){if(!v)return'';if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),'dd/MM/yyyy HH:mm:ss');return String(v)}
+function dateTimeInput_(v){
+  if(!v)return'';
+  if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm");
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s))return s.slice(0,16);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s+'T23:59';
+  return s;
+}
+function ensureColumn_(sh,nome){
+  const lastCol=Math.max(sh.getLastColumn(),1);
+  const headers=sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  if(headers.indexOf(nome)>=0)return;
+  sh.getRange(1,lastCol+1).setValue(nome);
+}
 
 function listarAtividades(){
   return rows_('ATIVIDADES').filter(x=>x.TURMA===TURMA&&x.COMPONENTE===COMPONENTE).map(a=>({
     id:a.ID_ATIVIDADE,titulo:a.TITULO,descricao:a.DESCRICAO,tipoEnvio:a.TIPO_ENVIO,
-    extensoes:a.EXTENSOES,maxArquivos:a.MAX_ARQUIVOS,prazo:date_(a.PRAZO),
+    extensoes:a.EXTENSOES,maxArquivos:a.MAX_ARQUIVOS,liberacao:dateTimeInput_(a.LIBERACAO),prazo:dateTimeInput_(a.PRAZO),
     materialUrl:a.MATERIAL_APOIO_URL,correcaoIA:a.CORRECAO_IA,criterios:a.GABARITO_CRITERIOS,
     status:a.STATUS,ordem:a.ORDEM
   })).sort((a,b)=>(Number(a.ordem)||999)-(Number(b.ordem)||999));
@@ -25,12 +39,14 @@ function listarAtividades(){
 
 function salvarAtividade(d){
   if(!d||!d.id||!d.titulo)throw new Error('ID e título são obrigatórios');
-  const sh=sh_('ATIVIDADES'),v=sh.getDataRange().getValues(),h=v[0],idx=h.indexOf('ID_ATIVIDADE');
+  const sh=sh_('ATIVIDADES');
+  ensureColumn_(sh,'LIBERACAO');
+  const v=sh.getDataRange().getValues(),h=v[0],idx=h.indexOf('ID_ATIVIDADE');
   const now=new Date();
   const map={
     ID_ATIVIDADE:d.id,TURMA:TURMA,COMPONENTE:COMPONENTE,TITULO:d.titulo,DESCRICAO:d.descricao||'',
     TIPO_ENVIO:d.tipoEnvio||'SEM_ENVIO',EXTENSOES:d.extensoes||'',MAX_ARQUIVOS:Number(d.maxArquivos||0),
-    PRAZO:d.prazo||'',MATERIAL_APOIO_URL:d.materialUrl||'',CORRECAO_IA:d.correcaoIA||'NAO',
+    LIBERACAO:d.liberacao||'',PRAZO:d.prazo||'',MATERIAL_APOIO_URL:d.materialUrl||'',CORRECAO_IA:d.correcaoIA||'NAO',
     GABARITO_CRITERIOS:d.criterios||'',STATUS:d.status||'RASCUNHO',ORDEM:Number(d.ordem||999),
     CRIADO_EM:now,ATUALIZADO_EM:now
   };
