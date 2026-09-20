@@ -5,8 +5,8 @@ function doGet(e){
   const action=String((e&&e.parameter&&e.parameter.action)||'listar').trim();
   try{
     if(action==='listar') return json_(listar_(e.parameter.turma,e.parameter.componente));
-    if(action==='atividade') return json_({ok:true,atividade:atividade_(e.parameter.id)});
-    if(action==='ping') return json_({ok:true,sistema:'LTP',versao:'1.1',agora:new Date().toISOString()});
+    if(action==='atividade') return json_({ok:true,atividade:atividade_(e.parameter.id),agoraServidor:new Date().toISOString()});
+    if(action==='ping') return json_({ok:true,sistema:'LTP',versao:'1.2',agora:new Date().toISOString()});
     return json_({ok:false,erro:'Ação inválida'});
   }catch(err){return json_({ok:false,erro:String(err.message||err)})}
 }
@@ -34,7 +34,7 @@ function listar_(turma,componente){
     .filter(x=>(!componente||eq_(x.COMPONENTE,componente)))
     .sort((a,b)=>Number(a.ORDEM||999)-Number(b.ORDEM||999))
     .map(m=>({id:m.ID_MATERIAL,titulo:m.TITULO,descricao:m.DESCRICAO,url:m.ARQUIVO_URL,tipo:m.TIPO,status:m.STATUS,publicadoEm:date_(m.PUBLICADO_EM)}));
-  return {ok:true,atividades,materiais};
+  return {ok:true,atividades,materiais,agoraServidor:new Date().toISOString()};
 }
 
 function atividade_(id){
@@ -44,6 +44,16 @@ function atividade_(id){
 }
 
 function mapAtividade_(a){
+  const agora=new Date();
+  const liberacao=parseDateTime_(a.LIBERACAO,false);
+  const prazo=parseDateTime_(a.PRAZO,true);
+  const status=String(a.STATUS||'RASCUNHO');
+  let situacao='FECHADA';
+  if(status==='PUBLICADA'){
+    if(liberacao&&agora<liberacao)situacao='AGENDADA';
+    else if(prazo&&agora>prazo)situacao='ENCERRADA';
+    else situacao='ABERTA';
+  }
   return {
     id:a.ID_ATIVIDADE,
     turma:a.TURMA,
@@ -54,18 +64,23 @@ function mapAtividade_(a){
     tipoEnvio:a.TIPO_ENVIO||'SEM_ENVIO',
     extensoes:a.EXTENSOES||'',
     maxArquivos:Number(a.MAX_ARQUIVOS||0),
-    prazo:date_(a.PRAZO),
+    liberacao:dateTimeOut_(a.LIBERACAO),
+    prazo:dateTimeOut_(a.PRAZO),
     materialUrl:a.MATERIAL_APOIO_URL||'',
     correcaoIA:a.CORRECAO_IA||'NAO',
     criterios:a.GABARITO_CRITERIOS||'',
-    status:a.STATUS||'RASCUNHO',
-    ordem:Number(a.ORDEM||999)
+    status:status,
+    ordem:Number(a.ORDEM||999),
+    situacao:situacao,
+    disponivel:situacao==='ABERTA'
   };
 }
 
 function salvarAtividade_(d){
   if(!d.id||!d.titulo)throw new Error('ID e título são obrigatórios');
-  const sh=sh_(ABAS.ATIVIDADES), dados=sheetData_(sh), now=new Date();
+  const sh=sh_(ABAS.ATIVIDADES);
+  ensureColumn_(sh,'LIBERACAO');
+  const dados=sheetData_(sh), now=new Date();
   const atual=dados.rows.find(x=>eq_(x.ID_ATIVIDADE,d.id));
   const obj={
     ID_ATIVIDADE:String(d.id).trim(),
@@ -76,6 +91,7 @@ function salvarAtividade_(d){
     TIPO_ENVIO:d.tipoEnvio||'SEM_ENVIO',
     EXTENSOES:d.extensoes||extensoesPadrao_(d.tipoEnvio),
     MAX_ARQUIVOS:Number(d.maxArquivos||0),
+    LIBERACAO:d.liberacao||'',
     PRAZO:d.prazo||'',
     MATERIAL_APOIO_URL:d.materialUrl||'',
     CORRECAO_IA:d.correcaoIA||'NAO',
@@ -105,10 +121,10 @@ function enviarAtividade_(d){
   const atividade=atividade_(d.idAtividade);
   if(!atividade)throw new Error('Atividade não encontrada');
   if(atividade.status!=='PUBLICADA')throw new Error('Atividade não está aberta para envio');
-  if(atividade.prazo){
-    const fim=new Date(atividade.prazo+'T23:59:59');
-    if(new Date()>fim && !d.aceitarAtraso)throw new Error('Prazo de entrega encerrado');
-  }
+  if(atividade.situacao==='AGENDADA')throw new Error('Atividade ainda não foi liberada');
+  if(atividade.situacao==='ENCERRADA'&&!d.aceitarAtraso)throw new Error('Prazo de entrega encerrado');
+  if(atividade.situacao!=='ABERTA'&&atividade.situacao!=='ENCERRADA')throw new Error('Atividade não está aberta para envio');
+
   const arquivos=Array.isArray(d.arquivos)?d.arquivos:[];
   if(atividade.tipoEnvio!=='FORMULARIO'&&atividade.tipoEnvio!=='TEXTO'&&atividade.tipoEnvio!=='SEM_ENVIO'){
     if(!arquivos.length)throw new Error('Selecione ao menos um arquivo');
@@ -182,3 +198,28 @@ function upsert_(sh,dados,chave,valor,obj){
 }
 function eq_(a,b){return String(a??'').trim()===String(b??'').trim()}
 function date_(v){if(!v)return'';if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');return String(v).slice(0,10)}
+function ensureColumn_(sh,nome){
+  const lastCol=Math.max(sh.getLastColumn(),1);
+  const headers=sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  if(headers.indexOf(nome)>=0)return;
+  sh.getRange(1,lastCol+1).setValue(nome);
+}
+function parseDateTime_(v,fimDoDiaSeSoData){
+  if(!v)return null;
+  if(Object.prototype.toString.call(v)==='[object Date]')return v;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),Number(m[4]),Number(m[5]),Number(m[6]||0),0);
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),fimDoDiaSeSoData?23:0,fimDoDiaSeSoData?59:0,fimDoDiaSeSoData?59:0,0);
+  const d=new Date(s);
+  return isNaN(d.getTime())?null:d;
+}
+function dateTimeOut_(v){
+  if(!v)return'';
+  if(Object.prototype.toString.call(v)==='[object Date]')return Utilities.formatDate(v,Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm");
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s))return s.slice(0,16);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s+'T23:59';
+  return s;
+}
